@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bouncing & Colliding Kyoki Images</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: black; display: flex; justify-content: center; align-items: center; }
+        .box { position: relative; width: 800px; height: 600px; border: 5px solid white; }
+        .kyoki { 
+            position: absolute; 
+            width: 64px; 
+            height: 64px; 
+            border: 2px solid white; 
+            border-radius: 50%; 
+            box-sizing: border-box; 
+            background-size: cover; 
+            background-position: center; 
+            transition: transform 0.1s ease; /* Smooth jiggle */
+        }
+    </style>
+</head>
+<body>
+    <div class="box" id="box"></div>
+    <audio id="collisionSound" preload="auto">
+        <source src="Gojo.mp3" type="audio/mp3">
+    </audio>
+    <script>
+        const box = document.getElementById("box"), collisionSound = document.getElementById("collisionSound"), kyokiArray = [];
+        const BOX_WIDTH = 800, BOX_HEIGHT = 600; // Box dimensions
+        const KYOKI_SIZE = 64; // Includes border size
+        const IMAGE_SRC = "https://i.gyazo.com/1dba8955028359ffeaa32c64f2046516.png"; // Your image URL
+
+        function createKyoki(x, y, vx, vy) {
+            const el = document.createElement("div");
+            el.className = "kyoki";
+            el.style.backgroundImage = `url('${IMAGE_SRC}')`;
+            box.appendChild(el);
+
+            kyokiArray.push({
+                el,
+                x,
+                y,
+                vx: vx || (Math.random() * 6 - 3),
+                vy: vy || (Math.random() * 6 - 3),
+                cooldown: 8000, // Spawn cooldown
+                collisionCooldown: 2500, // Collision off for 2.5 seconds
+                jiggleTimer: 0, // Timer for jiggling
+            });
+        }
+
+        createKyoki(BOX_WIDTH / 2, BOX_HEIGHT / 2, 4, 3); // Initial Kyoki
+
+        function checkCollision(k1, k2) {
+            if (k1.collisionCooldown > 0 || k2.collisionCooldown > 0) return false; // Ignore collision during cooldown
+            const dx = k1.x - k2.x;
+            const dy = k1.y - k2.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            return distance < KYOKI_SIZE; // Collision occurs if distance is less than Kyoki size
+        }
+
+        function resolveCollision(k1, k2) {
+            const dx = k1.x - k2.x;
+            const dy = k1.y - k2.y;
+            const angle = Math.atan2(dy, dx);
+
+            // Simple elastic collision response
+            const speed1 = Math.sqrt(k1.vx ** 2 + k1.vy ** 2);
+            const speed2 = Math.sqrt(k2.vx ** 2 + k2.vy ** 2);
+
+            k1.vx = speed2 * Math.cos(angle);
+            k1.vy = speed2 * Math.sin(angle);
+            k2.vx = speed1 * Math.cos(angle + Math.PI);
+            k2.vy = speed1 * Math.sin(angle + Math.PI);
+
+            // Play collision sound
+            collisionSound.currentTime = 0;
+            collisionSound.play();
+
+            // Trigger spinning and jiggling
+            startJiggle(k1);
+            startJiggle(k2);
+        }
+
+        function startJiggle(k) {
+            k.jiggleTimer = 2000; // Jiggle for 2 seconds
+        }
+
+        function animate() {
+            kyokiArray.forEach((k, i) => {
+                k.x += k.vx;
+                k.y += k.vy;
+                k.cooldown -= 16; // Reduce spawn cooldown (~60FPS)
+                k.collisionCooldown -= 16; // Reduce collision cooldown
+                k.jiggleTimer = Math.max(0, k.jiggleTimer - 16); // Reduce jiggle timer
+
+                // Jiggle and spin if active
+                if (k.jiggleTimer > 0) {
+                    const randomRotate = Math.random() * 360; // Random rotation
+                    const randomTranslateX = (Math.random() - 0.5) * 10; // Small jiggle in X
+                    const randomTranslateY = (Math.random() - 0.5) * 10; // Small jiggle in Y
+                    k.el.style.transform = `translate(${k.x + randomTranslateX}px, ${k.y + randomTranslateY}px) rotate(${randomRotate}deg)`;
+                } else {
+                    // Regular movement
+                    k.el.style.transform = `translate(${k.x}px, ${k.y}px)`;
+                }
+
+                // Bounce off walls and spawn new Kyoki
+                if (k.x <= 0 || k.x >= BOX_WIDTH - KYOKI_SIZE) {
+                    k.vx *= -1;
+                    if (k.cooldown <= 0) {
+                        createKyoki(k.x, k.y, Math.random() * 6 - 3, Math.random() * 6 - 3); // Spawn at exact location
+                        k.cooldown = 8000; // Reset cooldown
+                    }
+                }
+                if (k.y <= 0 || k.y >= BOX_HEIGHT - KYOKI_SIZE) {
+                    k.vy *= -1;
+                    if (k.cooldown <= 0) {
+                        createKyoki(k.x, k.y, Math.random() * 6 - 3, Math.random() * 6 - 3); // Spawn at exact location
+                        k.cooldown = 8000; // Reset cooldown
+                    }
+                }
+
+                // Respawn in the center if stuck out of bounds
+                if (k.x < -KYOKI_SIZE || k.x > BOX_WIDTH || k.y < -KYOKI_SIZE || k.y > BOX_HEIGHT) {
+                    k.x = BOX_WIDTH / 2;
+                    k.y = BOX_HEIGHT / 2;
+                    k.collisionCooldown = 2500; // Reset collision cooldown
+                }
+
+                // Check for collisions with other Kyokis
+                for (let j = i + 1; j < kyokiArray.length; j++) {
+                    if (checkCollision(k, kyokiArray[j])) {
+                        resolveCollision(k, kyokiArray[j]);
+                    }
+                }
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
